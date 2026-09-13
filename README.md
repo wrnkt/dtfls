@@ -18,7 +18,7 @@ A standalone Python script for managing files on your machine (especially config
 
 ### Usage
 
-The `.dtfls.json` specifies what files to track, or ignore, as well as configurable mappings for where your
+The *optional* `.dtfls.json` configuration specifies what files to track, or ignore, as well as configurable mappings for where your
 dotfiles are stored based on the system (`darwin`, `ubuntu`, `fedora`). Once you define these there's no need to
 handle syncing files or directories manually.
 
