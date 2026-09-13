@@ -19,12 +19,10 @@ A standalone Python script for managing files on your machine (especially config
 ### Usage
 
 The `.dtfls.json` specifies what files to track, or ignore, as well as configurable mappings for where your
-dotfiles are stored based on the system (`darwih`,  `linux:fedora`). Once you define these there's no need to
+dotfiles are stored based on the system (`darwin`, `ubuntu`, `fedora`). Once you define these there's no need to
 handle syncing files or directories manually.
-Some basic commands to get started:
-```bash
 
-Some basic commands to get started:
+Some commands to get started:
 ```bash
 dtfls add [file-path]     # copies a file from the provided system path into the config repo (then commits)
 dtfls sync                # l
