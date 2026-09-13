@@ -1,20 +1,15 @@
 # dtfls
 
-A standalone Python script for managing files on your machine (especially config/dotfiles).
+A Python CLI for managing files on your machine (especially config/dotfiles), backed by a git repo.
 
 ### Getting Started
-1. Create an empty directory to keep backups of your dotfiles.
-1. Initialize `git` and configure a Git remote for this repo.
-1. Copy this repo's `./dtfls` script into your new directory.
-1. If you'd like to invoke `dtfls` from anywhere, make it discoverable by adding this folder to your `PATH`
-1. Ensure proper permissions are set on `./dtfls`. It should be readable and executable.
+1. Install: `pip install dtfls` (a `pipx install dtfls` is recommended to keep it isolated).
+1. Run any `dtfls` command. On first use it creates and `git init`s the dotfiles repo at `~/.dtfls`.
+1. `cd ~/.dtfls` and configure a git remote to back up your dotfiles.
 1. Run `dtfls --help` for a simple overview.
 
 ### Notes
-* `dtfls` still relies on the script and saved files to be in the same directory
-* the copied config file backups should go into `~/.local/share/dtfls/`
-* the script or executable belongs in `~/.local/bin/dtfls` and if not so, through a symlink.
-- [ ] Add configuration through an env variable to pick any location to store the data 
+* The dotfiles repo defaults to `~/.dtfls`. Override the location with the `DTFLS_REPO` environment variable.
 
 ### Usage
 
