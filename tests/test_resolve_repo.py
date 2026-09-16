@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from pathlib import Path
 
 from dtfls import cli
 
@@ -16,10 +16,11 @@ def test_uses_dtfls_repo_env_var(tmp_path, monkeypatch):
 
 def test_creates_default_repo_when_missing(tmp_path, monkeypatch):
     monkeypatch.delenv("DTFLS_REPO", raising=False)
-    with patch.object(cli.Path, "home", return_value=tmp_path):
-        repo = cli.resolve_repo()
+    monkeypatch.setenv("HOME", str(tmp_path))
 
-    expected = tmp_path / cli.DEFAULT_REPO_DIR
+    repo = cli.resolve_repo()
+
+    expected = Path(cli.DEFAULT_REPO_DIR).expanduser()
     assert repo == expected
     assert expected.is_dir()
     assert (expected / ".git").is_dir()
