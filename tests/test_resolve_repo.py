@@ -19,7 +19,7 @@ def test_creates_default_repo_when_missing(tmp_path, monkeypatch):
     with patch.object(cli.Path, "home", return_value=tmp_path):
         repo = cli.resolve_repo()
 
-    expected = tmp_path / ".dtfls"
+    expected = tmp_path / cli.DEFAULT_REPO_DIR
     assert repo == expected
     assert expected.is_dir()
     assert (expected / ".git").is_dir()

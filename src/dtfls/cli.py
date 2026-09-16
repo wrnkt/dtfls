@@ -2,8 +2,9 @@
 dtfls — portable dotfile sync from a git repo.
 
 Manages a git repo of dotfiles. The repo location is resolved at startup:
-the DTFLS_REPO environment variable if set, otherwise ~/.dtfls (created,
-and initialized as a git repo, on first use).
+the DTFLS_REPO environment variable if set, otherwise DEFAULT_REPO_DIR
+under the user's home directory (created, and initialized as a git repo,
+on first use).
 
 Python 3.8+  |  no external dependencies  |  macOS · Fedora · Ubuntu
 
@@ -38,6 +39,7 @@ from typing import Dict, List, Optional, Tuple
 # Resolved at CLI startup by resolve_repo() — see main().
 REPO: Optional[Path] = None
 CONFIG_NAME = ".dtfls.json"
+DEFAULT_REPO_DIR = ".dtfls"  # under $HOME, unless $DTFLS_REPO overrides it
 
 
 # ── Terminal output ───────────────────────────────────────────────────────────
@@ -119,11 +121,11 @@ def get_hostname() -> str:
 def resolve_repo() -> Path:
     """
     Resolve the dotfiles repo location: $DTFLS_REPO if set, otherwise
-    ~/.dtfls. Creates the directory and initializes it as a git repo on
-    first use.
+    DEFAULT_REPO_DIR under the user's home directory. Creates the
+    directory and initializes it as a git repo on first use.
     """
     env = os.environ.get("DTFLS_REPO")
-    repo = Path(env).expanduser().resolve() if env else Path.home() / ".dtfls"
+    repo = Path(env).expanduser().resolve() if env else Path.home() / DEFAULT_REPO_DIR
 
     if not repo.exists():
         repo.mkdir(parents=True)
@@ -1089,7 +1091,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="dtfls",
         description=(
             "Portable dotfile sync. Manages your dotfiles repo "
-            "(default: ~/.dtfls, override with $DTFLS_REPO)."
+            f"(default: ~/{DEFAULT_REPO_DIR}, override with $DTFLS_REPO)."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
