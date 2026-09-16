@@ -1,7 +1,9 @@
-#!/usr/bin/env python3
 """
 dtfls — portable dotfile sync from a git repo.
-This script lives in the root of your dotfile repo.
+
+Manages a git repo of dotfiles. The repo location is resolved at startup:
+the DTFLS_REPO environment variable if set, otherwise DEFAULT_REPO_DIR
+(created, and initialized as a git repo, on first use).
 
 Python 3.8+  |  no external dependencies  |  macOS · Fedora · Ubuntu
 
@@ -16,7 +18,7 @@ Repo layout convention (no config required):
 
 Branch conventions:
   main / master    default source
-  host/<hostname>  machine-specific overrides (used with --host-branch)
+  host/<host>      machine-specific overrides (used with --host-branch)
   backup/<host>-*  auto-created snapshots of deployed state
 """
 
@@ -33,9 +35,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-# Script resolves its own repo location — works from any cwd.
-REPO = Path(__file__).resolve().parent
+# Resolved at CLI startup by resolve_repo() — see main().
+REPO: Optional[Path] = None
 CONFIG_NAME = ".dtfls.json"
+DEFAULT_REPO_DIR = "~/.dtfls"  # used unless $DTFLS_REPO overrides it
 
 
 # ── Terminal output ───────────────────────────────────────────────────────────
@@ -111,6 +114,29 @@ def get_hostname() -> str:
     return socket.gethostname().split(".")[0]
 
 
+# ── Repo resolution ───────────────────────────────────────────────────────────
+
+
+def resolve_repo() -> Path:
+    """
+    Resolve the dotfiles repo location: $DTFLS_REPO if set, otherwise
+    DEFAULT_REPO_DIR. Creates the directory and initializes it as a git
+    repo on first use.
+    """
+    env = os.environ.get("DTFLS_REPO")
+    repo = Path(env or DEFAULT_REPO_DIR).expanduser().resolve()
+
+    if not repo.exists():
+        repo.mkdir(parents=True)
+        _ok(f"Created dotfiles repo: {repo}")
+
+    if not (repo / ".git").is_dir():
+        subprocess.run(["git", "init", "-q", str(repo)])
+        _ok(f"Initialized git repo: {repo}")
+
+    return repo
+
+
 # ── Git helpers ───────────────────────────────────────────────────────────────
 
 
@@ -170,7 +196,7 @@ def git_list_branches(prefix: str) -> List[str]:
 
 def is_git(p: Path):
     """Return if path includes a .git dir"""
-    return ".git" not in p.parts
+    return ".git" in p.parts
 
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -185,8 +211,6 @@ DEFAULT_IGNORE: List[str] = [
     "README*",
     "LICENSE*",
     ".gitignore",
-    "dtfls.py",  # never deploy the script itself
-    "dtfls",
 ]
 
 
@@ -1064,11 +1088,13 @@ def cmd_push(args: argparse.Namespace) -> None:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="dtfls",
-        description="Portable dotfile sync. This script lives in the root of your dotfile repo.",
+        description=(
+            "Portable dotfile sync. Manages your dotfiles repo "
+            f"(default: {DEFAULT_REPO_DIR}, override with $DTFLS_REPO)."
+        ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 repo layout (convention, no config file required):
-  dtfls.py            ←  this script (never copied to targets)
   home/                 →  $HOME           (all platforms)
   home.darwin/          →  $HOME           (macOS only)
   home.linux/           →  $HOME           (Linux only)
@@ -1203,6 +1229,8 @@ examples:
 
 
 def main() -> None:
+    global REPO
+
     parser = build_parser()
     args = parser.parse_args()
 
@@ -1223,6 +1251,8 @@ def main() -> None:
     if args.cmd not in dispatch:
         parser.print_help()
         sys.exit(0)
+
+    REPO = resolve_repo()
 
     try:
         dispatch[args.cmd](args)
