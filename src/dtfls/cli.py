@@ -195,7 +195,7 @@ def git_list_branches(prefix: str) -> List[str]:
 
 def is_git(p: Path):
     """Return if path includes a .git dir"""
-    return ".git" not in p.parts
+    return ".git" in p.parts
 
 
 # ── Config ────────────────────────────────────────────────────────────────────
