@@ -14,7 +14,7 @@ Repo layout convention (no config required):
   home.ubuntu/     → $HOME           (Ubuntu only)
   home.fedora/     → $HOME           (Fedora only)
 
-  .dtfls.json    optional config at repo root (see --help for schema)
+  config.json    optional config at repo root (see --help for schema)
 
 Branch conventions:
   main / master    default source
@@ -37,7 +37,7 @@ from typing import Dict, List, Optional, Tuple
 
 # Resolved at CLI startup by resolve_repo() — see main().
 REPO: Optional[Path] = None
-CONFIG_NAME = ".dtfls.json"
+CONFIG_NAME = "config.json"
 DEFAULT_REPO_DIR = "~/.dtfls"  # used unless $DTFLS_REPO overrides it
 
 
@@ -214,16 +214,38 @@ DEFAULT_IGNORE: List[str] = [
 ]
 
 
+def load_user_config() -> Dict:
+    """Load raw config from REPO/config.json. Returns {} if absent."""
+    cfg_file = REPO / CONFIG_NAME
+    if not cfg_file.exists():
+        return {}
+    with open(cfg_file) as f:
+        return json.load(f)
+
+
+def save_user_config(user_cfg: Dict) -> None:
+    """Write user config to REPO/config.json."""
+    cfg_file = REPO / CONFIG_NAME
+    with open(cfg_file, "w") as f:
+        json.dump(user_cfg, f, indent=2)
+        f.write("\n")
+
+
+def ensure_config() -> None:
+    """Create REPO/config.json with empty defaults if it does not exist."""
+    cfg_file = REPO / CONFIG_NAME
+    if not cfg_file.exists():
+        save_user_config({})
+
+
 def load_config() -> Dict:
     cfg: Dict = {
         "ignore": list(DEFAULT_IGNORE),
         "hooks": {"pre_sync": [], "post_sync": []},
     }
-    cfg_file = REPO / CONFIG_NAME
-    if not cfg_file.exists():
+    user = load_user_config()
+    if not user:
         return cfg
-    with open(cfg_file) as f:
-        user = json.load(f)
     if "ignore" in user:
         seen = set(cfg["ignore"])
         for pat in user["ignore"]:
@@ -521,7 +543,7 @@ def cmd_sync(args: argparse.Namespace) -> None:
     dirs = active_dirs(config)
     if not dirs:
         _warn("No source directories found.")
-        _warn("Create a home/ dir in your repo, or add mappings to .dtfls.json.")
+        _warn(f"Create a home/ dir in your repo, or add mappings to {CONFIG_NAME}.")
         return
 
     # plan: src_name → [(content_bytes, target_path, display_label)]
@@ -617,7 +639,7 @@ def cmd_adopt(args: argparse.Namespace) -> None:
 
     tracked = resolve_tracked_files(config)
     if not tracked:
-        _warn("No files listed in the 'track' key of .dtfls.json.")
+        _warn(f"No files listed in the 'track' key of {CONFIG_NAME}.")
         _warn('Add entries like:  "track": ["~/.bashrc", "~/.config/nvim/init.lua"]')
         sys.exit(0)
 
@@ -648,6 +670,29 @@ def cmd_adopt(args: argparse.Namespace) -> None:
             tag = "updated"
         else:
             tag = "added"
+
+        if getattr(args, "interactive", False) and tag == "updated" and not dry:
+            _head(f"diff: {label}  {C.DIM}(repo → system){C.RESET}")
+            suffix = deployed.suffix or ""
+            with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+                tmp.write(repo_dest.read_bytes())
+                tmp_path = tmp.name
+            try:
+                subprocess.run(
+                    ["diff", "-u",
+                     "--label", f"repo/{label}",
+                     "--label", f"system/{label}",
+                     tmp_path, str(deployed)]
+                )
+            finally:
+                os.unlink(tmp_path)
+            try:
+                answer = input("\n  Adopt this change? [y/N] ").strip().lower()
+            except EOFError:
+                answer = ""
+            if answer not in ("y", "yes"):
+                _info("Skipped.")
+                continue
 
         if not dry:
             repo_dest.parent.mkdir(parents=True, exist_ok=True)
@@ -704,12 +749,36 @@ def cmd_adopt(args: argparse.Namespace) -> None:
 # ── add ───────────────────────────────────────────────────────────────────────
 
 
+def _add_to_track(paths: List[Path]) -> None:
+    """Append deployed paths to the 'track' list in config.json, no duplicates."""
+    if not paths:
+        return
+    user_cfg = load_user_config()
+    track = user_cfg.get("track", [])
+    existing = set(track)
+    home = Path.home()
+    changed = False
+    for p in paths:
+        try:
+            path_str = "~/" + str(p.relative_to(home))
+        except ValueError:
+            path_str = str(p)
+        if path_str not in existing:
+            track.append(path_str)
+            existing.add(path_str)
+            changed = True
+    if changed:
+        user_cfg["track"] = track
+        save_user_config(user_cfg)
+
+
 def cmd_add(args: argparse.Namespace) -> None:
     """Copy one or more files/directories into the repo and commit together."""
     config = load_config()
     dirs = active_dirs(config)
 
     added: List[Path] = []  # repo paths successfully written, for git add
+    newly_tracked: List[Path] = []  # deployed paths to register in config track list
 
     def _add_one(file_path: Path) -> None:
         """Route and copy a single file into the repo tree."""
@@ -735,15 +804,18 @@ def cmd_add(args: argparse.Namespace) -> None:
         if repo_file.exists():
             if repo_file.read_bytes() == file_path.read_bytes():
                 _dim(f"✓  already up to date: {matched_src}/{rel}")
+                newly_tracked.append(file_path)
                 return
             repo_file.write_bytes(file_path.read_bytes())
             _ok(f"Updated in repo: {matched_src}/{rel}")
             added.append(repo_file)
+            newly_tracked.append(file_path)
             return
         repo_file.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(str(file_path), str(repo_file))
         _ok(f"Copied to repo: {matched_src}/{rel}")
         added.append(repo_file)
+        newly_tracked.append(file_path)
 
     for raw in args.files:
         path = Path(raw).expanduser().resolve()
@@ -773,11 +845,18 @@ def cmd_add(args: argparse.Namespace) -> None:
         else:
             _add_one(path)
 
+    _add_to_track(newly_tracked)
+
     if not added:
         return
 
     for p in added:
         _git("add", str(p))
+
+    # Stage updated config.json so the track list is committed alongside the files.
+    cfg_file = REPO / CONFIG_NAME
+    if cfg_file.exists():
+        _git("add", str(cfg_file))
 
     n = len(added)
     names = ", ".join(str(p.relative_to(REPO)) for p in added[:3])
@@ -1117,7 +1196,7 @@ branch conventions:
   host/<hostname>           machine-specific config — use with --host-branch
   backup/<hostname>-<ts>    auto-snapshot of deployed state before overwrite
 
-.dtfls.json schema (all keys optional):
+config.json schema (all keys optional):
   {
     "track": [
       "~/.bashrc",
@@ -1180,6 +1259,11 @@ examples:
         "--message",
         metavar="<msg>",
         help="Override the auto-generated git commit message",
+    )
+    pa2.add_argument(
+        "--interactive",
+        action="store_true",
+        help="For each changed file: show diff (repo vs system) and confirm before adopting",
     )
 
     # sync
@@ -1264,6 +1348,7 @@ def main() -> None:
         sys.exit(0)
 
     REPO = resolve_repo()
+    ensure_config()
 
     try:
         dispatch[args.cmd](args)
