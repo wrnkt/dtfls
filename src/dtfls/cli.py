@@ -757,6 +757,17 @@ def cmd_add(args: argparse.Namespace) -> None:
             if not files:
                 _warn(f"Empty directory, nothing to add: {path}")
                 continue
+            _info(f"Directory: {path}  ({len(files)} file(s) will be tracked)")
+            for f in files:
+                _dim(str(f.relative_to(path)))
+            if sys.stdin.isatty():
+                try:
+                    answer = input(f"\n  Add these {len(files)} file(s)? [y/N] ").strip().lower()
+                except EOFError:
+                    answer = ""
+                if answer not in ("y", "yes"):
+                    _info("Skipped.")
+                    continue
             for f in files:
                 _add_one(f)
         else:
