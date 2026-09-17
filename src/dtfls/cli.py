@@ -40,6 +40,8 @@ REPO: Optional[Path] = None
 CONFIG_NAME = "config.json"
 DEFAULT_REPO_DIR = "~/.dtfls"  # used unless $DTFLS_REPO overrides it
 
+FEATURE_INTERACTIVE = False  # enable to expose --interactive on `adopt`
+
 
 # ── Terminal output ───────────────────────────────────────────────────────────
 
@@ -497,13 +499,13 @@ def run_hooks(hooks: List[str]) -> None:
 
 def cmd_sync(args: argparse.Namespace) -> None:
     config = load_config()
-    dry = args.dry_run
+    dry = not args.apply
     hostname = get_hostname()
     ignore = config.get("ignore", DEFAULT_IGNORE)
     plat, distro = detect_os()
 
     if dry:
-        _head("Dry run — no filesystem changes will be made")
+        _head("Preview — pass --apply to sync files to system")
 
     # ── Determine source branch ──────────────────────────────────────────────
     if args.host_branch:
@@ -596,7 +598,7 @@ def cmd_sync(args: argparse.Namespace) -> None:
             if status == "ok":
                 _dim(f"✓  {label}")
             else:
-                tag = "[dry]" if dry else "copied"
+                tag = "[preview]" if dry else "copied"
                 _ok(f"{tag:7}  {label}")
 
     # ── Post-sync hooks ──────────────────────────────────────────────────────
@@ -614,7 +616,7 @@ def cmd_sync(args: argparse.Namespace) -> None:
     print()
     _ok("Done.  " + " · ".join(parts))
     if dry:
-        _warn("(dry run — nothing was changed)")
+        _warn("(preview — nothing was changed)")
 
 
 # ── adopt ─────────────────────────────────────────────────────────────────────
@@ -632,10 +634,10 @@ def cmd_adopt(args: argparse.Namespace) -> None:
       missing  — file not found on this machine; skipped with warning
     """
     config = load_config()
-    dry = args.dry_run
+    dry = not args.commit
 
     if dry:
-        _head("Dry run — no changes will be made")
+        _head("Preview — pass --commit to adopt changes")
 
     tracked = resolve_tracked_files(config)
     if not tracked:
@@ -716,7 +718,7 @@ def cmd_adopt(args: argparse.Namespace) -> None:
     _ok("Done.  " + " · ".join(parts))
 
     if dry:
-        _warn("(dry run — nothing was changed)")
+        _warn("(preview — nothing was changed)")
         return
 
     if not changed_paths:
@@ -1218,22 +1220,22 @@ config.json schema (all keys optional):
   }
 
 examples:
-  dtfls adopt                         copy all tracked files from system → repo
-  dtfls adopt --dry-run               preview what would be copied
-  dtfls adopt --no-commit             write files but skip the git commit
-  dtfls adopt -m "snapshot before upgrade"
-  dtfls sync                          copy from current branch
-  dtfls sync --host-branch            use host/<hostname> branch; auto-snapshot before overwrite
-  dtfls sync --host-branch --no-save  use host branch, skip snapshot
-  dtfls sync --dry-run                preview only
-  dtfls sync --no-pull                skip git pull
-  dtfls add ~/.bashrc                 track a single new file and commit
+  dtfls adopt                             preview what would be adopted (default)
+  dtfls adopt --commit                    copy tracked system files into repo and commit
+  dtfls adopt --commit --no-commit        write files to repo but skip the git commit
+  dtfls adopt --commit -m "snapshot"
+  dtfls sync                              preview what would be synced (default)
+  dtfls sync --apply                      copy files from repo to system
+  dtfls sync --apply --host-branch        use host/<hostname> branch; auto-snapshot before overwrite
+  dtfls sync --apply --host-branch --no-save  use host branch, skip snapshot
+  dtfls sync --apply --no-pull            skip git pull
+  dtfls add ~/.bashrc                     track a single new file and commit
   dtfls add ~/.config/nvim/init.lua -m "track neovim config"
-  dtfls status                        per-file sync state
-  dtfls diff                          diff all deployed files vs repo
-  dtfls diff ~/.bashrc                diff one file
-  dtfls branches                      list host/ and backup/ branches
-  dtfls info                          show config, mappings, track list status
+  dtfls status                            per-file sync state
+  dtfls diff                              diff all deployed files vs repo
+  dtfls diff ~/.bashrc                    diff one file
+  dtfls branches                          list host/ and backup/ branches
+  dtfls info                              show config, mappings, track list status
         """,
     )
     sub = p.add_subparsers(dest="cmd", metavar="command")
@@ -1244,15 +1246,14 @@ examples:
         help="Copy all files listed in 'track' from system into repo",
     )
     pa2.add_argument(
-        "-n",
-        "--dry-run",
+        "--commit",
         action="store_true",
-        help="Preview what would be copied; make no changes",
+        help="Actually write files to repo and commit (default is preview only)",
     )
     pa2.add_argument(
         "--no-commit",
         action="store_true",
-        help="Write files to repo but skip the git commit",
+        help="With --commit: write files to repo but skip the git commit",
     )
     pa2.add_argument(
         "-m",
@@ -1260,19 +1261,19 @@ examples:
         metavar="<msg>",
         help="Override the auto-generated git commit message",
     )
-    pa2.add_argument(
-        "--interactive",
-        action="store_true",
-        help="For each changed file: show diff (repo vs system) and confirm before adopting",
-    )
+    if FEATURE_INTERACTIVE:
+        pa2.add_argument(
+            "--interactive",
+            action="store_true",
+            help="For each changed file: show diff (repo vs system) and confirm before adopting",
+        )
 
     # sync
     ps = sub.add_parser("sync", help="Copy dotfiles from repo to system")
     ps.add_argument(
-        "-n",
-        "--dry-run",
+        "--apply",
         action="store_true",
-        help="Preview what would be copied; make no changes",
+        help="Actually copy files to system (default is preview only)",
     )
     ps.add_argument(
         "--no-pull", action="store_true", help="Skip git pull before syncing"
