@@ -385,7 +385,8 @@ def route(path: Path, dirs: List[Tuple[str, Path]]) -> Optional[Tuple[str, Path]
 
 
 def _is_ignored(path: Path, patterns: List[str]) -> bool:
-    return any(fnmatch.fnmatch(path.name, p) for p in patterns)
+    # A trailing "/" (e.g. "secrets/") names a directory; match its name.
+    return any(fnmatch.fnmatch(path.name, p.rstrip("/")) for p in patterns)
 
 
 def iter_branch_files(

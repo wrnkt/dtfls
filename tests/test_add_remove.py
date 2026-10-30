@@ -82,3 +82,16 @@ def test_remove_accepts_repo_path(repo, tmp_path, monkeypatch):
     )
 
     assert not (repo / "home" / ".vimrc").exists()
+
+
+def test_trailing_slash_ignore_pattern_matches_directory(repo, monkeypatch):
+    monkeypatch.setattr(cli, "detect_os", lambda: ("linux", None))
+    (repo / "home" / "secrets").mkdir(parents=True)
+    (repo / "home" / "secrets" / "token").write_text("s")
+    (repo / "home" / ".bashrc").write_text("x")
+    cli._git("add", "-A")
+    cli._git("commit", "-m", "init")
+
+    files = cli.iter_branch_files("HEAD", "home", ["secrets/"])
+
+    assert [str(rel) for _, rel in files] == [".bashrc"]

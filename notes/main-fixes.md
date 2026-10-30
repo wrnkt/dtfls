@@ -10,7 +10,8 @@ copies corrected behaviour rather than bugs. Each fix has a regression test in
 | 2 | `add` / `remove` routed to the **first** (most general) matching dir; `adopt` / `info` / `resolve_tracked_files` use the **most specific** | On Fedora with `home/` and `home.linux/`, `add ~/.bashrc` wrote `home/.bashrc`, but `adopt` later wrote `home.linux/.bashrc`: two diverging copies | New shared `route()` (most specific wins) used by `add` and `resolve_tracked_files`. `remove` prefers the most specific dir that actually holds the file, falling back to the most specific covering dir |
 | 3 | `Path.is_relative_to` is Python 3.9+, but `pyproject.toml` declares `>=3.8` | `dtfls remove` crashed on 3.8 | `_is_relative_to()` shim |
 | 4 | `add` on a file outside every mapped destination | Uncaught `ValueError` traceback | Clean error message, file skipped |
-| 5 | README drift | Said `.dtfls.json` (code uses `config.json`); documented `adopt --dry-run` (preview is now the default); listed `sync` twice | README command list rewritten to match the CLI |
+| 5 | Ignore patterns with a trailing `/` (the `"secrets/"` example in `--help`) were matched with `fnmatch` against a bare name, so they never matched | Files under an ignored directory were synced anyway | Strip the trailing `/` before matching |
+| 6 | README drift | Said `.dtfls.json` (code uses `config.json`); documented `adopt --dry-run` (preview is now the default); listed `sync` twice | README command list rewritten to match the CLI |
 
 ## Retracted
 
