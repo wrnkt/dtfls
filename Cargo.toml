@@ -1,0 +1,34 @@
+[package]
+name = "dtfls"
+version = "0.2.0"
+edition = "2021"
+rust-version = "1.80"
+description = "Portable dotfile sync from a git repo."
+license = "MIT"
+repository = "https://github.com/wrnkt/dtfls"
+readme = "README.md"
+authors = ["wrnkt"]
+categories = ["command-line-utilities"]
+keywords = ["dotfiles", "git", "sync"]
+include = ["src/**/*.rs", "Cargo.toml", "Cargo.lock", "README.md", "LICENSE"]
+
+[[bin]]
+name = "dtfls"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0.104"
+chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
+clap = { version = "4.5.61", features = ["derive", "wrap_help"] }
+ctrlc = "3.5.2"
+gethostname = "1.1.0"
+globset = "0.4.19"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1.0.154", features = ["preserve_order"] }
+similar = { version = "2.7.0", features = ["text"] }
+walkdir = "2.5.0"
+
+[dev-dependencies]
+assert_cmd = "2.1.2"
+predicates = "3.1.4"
+tempfile = "3.27.0"
