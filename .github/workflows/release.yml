@@ -56,14 +56,13 @@ jobs:
           files: dist/*
           draft: false
 
-  # Disabled until PyPI Trusted Publishing is configured for this repo:
+  # Requires PyPI Trusted Publishing to be registered for this repo first:
   # pypi.org -> Account Settings -> Publishing -> Add a pending publisher
   #   PyPI project name: dtfls
   #   Owner: wrnkt   Repository: dtfls   Workflow: release.yml   Environment: pypi
-  # Once that's done, flip `if: false` to `if: true` below.
+  # See RELEASING.md for the full one-time setup.
   pypi:
     needs: build
-    if: false
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -78,3 +77,23 @@ jobs:
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+
+  # Requires the wrnkt/homebrew-dtfls tap repo to exist, with an initial
+  # Formula/dtfls.rb committed (see packaging/homebrew/dtfls.rb), and a
+  # HOMEBREW_TAP_TOKEN repo secret (a PAT with contents:write on the tap
+  # repo, since the default GITHUB_TOKEN can't push to a different repo).
+  # See RELEASING.md for the full one-time setup.
+  homebrew:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: mislav/bump-homebrew-formula-action@v3
+        with:
+          formula-name: dtfls
+          formula-path: Formula/dtfls.rb
+          homebrew-tap: wrnkt/homebrew-dtfls
+          download-url: https://github.com/wrnkt/dtfls/archive/refs/tags/${{ github.ref_name }}.tar.gz
+          commit-message: |
+            {{formulaName}} {{version}}
+        env:
+          COMMITTER_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
