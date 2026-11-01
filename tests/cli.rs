@@ -360,3 +360,45 @@ fn invalid_config_is_a_clean_error() {
         .code(1)
         .stderr(contains("parsing"));
 }
+
+#[test]
+fn add_routes_to_most_specific_dir_like_adopt() {
+    let env = Env::new();
+    env.cmd().arg("info").assert().success();
+    let os_dir = if cfg!(target_os = "macos") {
+        "home.darwin"
+    } else {
+        "home.linux"
+    };
+    fs::create_dir(env.repo.join("home")).unwrap();
+    fs::create_dir(env.repo.join(os_dir)).unwrap();
+    env.write(&env.home.join(".bashrc"), "x\n");
+
+    env.cmd()
+        .args(["add", "~/.bashrc"])
+        .assert()
+        .success()
+        .stdout(contains(format!("Copied to repo: {os_dir}/.bashrc")));
+    assert!(env.repo.join(os_dir).join(".bashrc").is_file());
+    assert!(!env.repo.join("home/.bashrc").exists());
+
+    env.cmd()
+        .arg("adopt")
+        .assert()
+        .success()
+        .stdout(contains(format!("✓  {os_dir}/.bashrc")));
+}
+
+#[test]
+fn remove_accepts_a_path_inside_the_repo() {
+    let env = Env::new();
+    env.with_committed_bashrc("x\n");
+
+    let repo_path = env.repo.join("home/.bashrc");
+    env.cmd()
+        .args(["rm", repo_path.to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout(contains("Removed from repo: home/.bashrc"));
+    assert!(!repo_path.exists());
+}

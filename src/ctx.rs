@@ -1,5 +1,5 @@
-//! Everything a command needs to know about where it is running. Replaces
-//! the Python module's global `REPO` so tests can build one directly.
+//! Everything a command needs to know about where it is running, passed
+//! explicitly so tests can build one directly.
 
 use std::path::{Path, PathBuf};
 
