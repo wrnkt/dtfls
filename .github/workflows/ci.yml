@@ -6,7 +6,31 @@ on:
   pull_request:
 
 jobs:
-  test:
+  rust:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+      - name: Test
+        run: cargo test --locked
+
+  # Python implementation, kept until the Rust cutover.
+  python:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -29,3 +53,25 @@ jobs:
 
       - name: Run tests
         run: pytest -v
+
+  # Python and Rust must print the same thing for the same scenario.
+  parity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: |
+          pip install -e .
+          cargo build --locked
+
+      - name: Compare output
+        run: scripts/parity.sh
