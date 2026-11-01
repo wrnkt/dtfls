@@ -13,19 +13,20 @@ A Python CLI for managing files on your machine (especially config/dotfiles), ba
 
 ### Usage
 
-The *optional* `.dtfls.json` configuration specifies what files to track, or ignore, as well as configurable mappings for where your
+The `config.json` at the root of the dotfiles repo (created empty on first run, and updated by `dtfls add`) specifies what files to track, or ignore, as well as configurable mappings for where your
 dotfiles are stored based on the system (`darwin`, `ubuntu`, `fedora`). Once you define these there's no need to
 handle syncing files or directories manually.
 
 Some commands to get started:
 ```bash
-dtfls add [file-path]     # copies a file from the provided system path into the config repo (then commits)
-dtfls sync                # l
-dtfls info                # show config, mappings, and list status
-dtfls sync                # syncs the tracked dotfiles in your config repo with your system files
-dtfls status              # shows sync status / drif
-dtfls diff                # diff all :deployed" system files vs. repo
+dtfls add <path>          # copies a file (or every file in a directory) into the repo, tracks it, and commits
+dtfls remove <path>       # deletes a file from the repo and commits; the copy on your system is left alone
+dtfls info                # show config, mappings, and tracked-file status
+dtfls status              # shows sync status / drift between repo and system
+dtfls diff                # diff all deployed system files vs. repo
 dtfls diff ~/.bashrc      # diffs the indicated file
-dtfls adopt               # copies all tracked system files into the repo
-dtfls adopt --dry-run     # same as the above except it shows a preview of what would be copied
+dtfls sync                # preview what syncing repo → system would change
+dtfls sync --apply        # copy the dotfiles in the repo onto your system
+dtfls adopt               # preview copying all tracked system files into the repo
+dtfls adopt --commit      # copy all tracked system files into the repo and commit
 ```

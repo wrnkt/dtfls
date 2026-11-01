@@ -201,6 +201,15 @@ def is_git(p: Path):
     return ".git" in p.parts
 
 
+def _is_relative_to(p: Path, other: Path) -> bool:
+    """Path.is_relative_to() for Python < 3.9."""
+    try:
+        p.relative_to(other)
+        return True
+    except ValueError:
+        return False
+
+
 # ── Config ────────────────────────────────────────────────────────────────────
 
 DEFAULT_IGNORE: List[str] = [
@@ -346,13 +355,7 @@ def resolve_tracked_files(
             continue
 
         # Auto-route: find the most specific active dir that covers this file.
-        matched: Optional[Tuple[str, Path]] = None
-        for src_name, dest_dir in dirs:  # general→specific order
-            try:
-                deployed.relative_to(dest_dir)  # raises if not under dest_dir
-                matched = (src_name, dest_dir)
-            except ValueError:
-                continue
+        matched = route(deployed, dirs)
 
         if matched is None:
             _warn(f"Cannot route {entry['path']} to any active src dir — skipping")
@@ -365,8 +368,25 @@ def resolve_tracked_files(
     return result
 
 
+def route(path: Path, dirs: List[Tuple[str, Path]]) -> Optional[Tuple[str, Path]]:
+    """
+    Return the most specific (src_name, dest_dir) in *dirs* whose dest_dir
+    contains *path*, or None. *dirs* is ordered general → specific, as
+    returned by active_dirs(), so the last match wins.
+    """
+    matched: Optional[Tuple[str, Path]] = None
+    for src_name, dest_dir in dirs:
+        try:
+            path.relative_to(dest_dir)
+            matched = (src_name, dest_dir)
+        except ValueError:
+            continue
+    return matched
+
+
 def _is_ignored(path: Path, patterns: List[str]) -> bool:
-    return any(fnmatch.fnmatch(path.name, p) for p in patterns)
+    # A trailing "/" (e.g. "secrets/") names a directory; match its name.
+    return any(fnmatch.fnmatch(path.name, p.rstrip("/")) for p in patterns)
 
 
 def iter_branch_files(
@@ -757,7 +777,8 @@ def _add_to_track(paths: List[Path]) -> None:
         return
     user_cfg = load_user_config()
     track = user_cfg.get("track", [])
-    existing = set(track)
+    # Entries are either plain path strings or {"path": ...} objects.
+    existing = {e if isinstance(e, str) else e.get("path") for e in track}
     home = Path.home()
     changed = False
     for p in paths:
@@ -784,23 +805,16 @@ def cmd_add(args: argparse.Namespace) -> None:
 
     def _add_one(file_path: Path) -> None:
         """Route and copy a single file into the repo tree."""
-        matched_src: Optional[str] = None
-        matched_dest: Optional[Path] = None
-        for src_name, dest_dir in dirs:
-            try:
-                file_path.relative_to(dest_dir)
-                matched_src = src_name
-                matched_dest = dest_dir
-                break
-            except ValueError:
-                continue
+        matched = route(file_path, dirs)
+        if matched is None:
+            matched = ("home", Path.home())
+        matched_src, matched_dest = matched
 
-        if matched_src is None:
-            (REPO / "home").mkdir(exist_ok=True)
-            matched_src = "home"
-            matched_dest = Path.home()
-
-        rel = file_path.relative_to(matched_dest)  # type: ignore[arg-type]
+        try:
+            rel = file_path.relative_to(matched_dest)
+        except ValueError:
+            _err(f"Cannot add {file_path}: not under any mapped destination")
+            return
         repo_file = REPO / matched_src / rel
 
         if repo_file.exists():
@@ -1074,22 +1088,24 @@ def cmd_remove(args: argparse.Namespace) -> None:
     removed_repo: List[Path] = []  # repo paths deleted, for git rm
 
     def _find_repo_path(deployed: Path) -> Optional[Tuple[str, Path, Path]]:
-        """Return (src_name, rel, repo_path) for a deployed file path, or None."""
-        matched_src: Optional[str] = None
-        matched_dest: Optional[Path] = None
+        """
+        Return (src_name, rel, repo_path) for a deployed file path, or None.
+        Prefers the most specific active dir that actually holds the file in
+        the repo; falls back to the most specific dir that covers the path.
+        """
+        candidates: List[Tuple[str, Path, Path]] = []
         for src_name, dest_dir in dirs:
             try:
-                deployed.relative_to(dest_dir)
-                matched_src = src_name
-                matched_dest = dest_dir
-                break
+                rel = deployed.relative_to(dest_dir)
             except ValueError:
                 continue
-        if matched_src is None:
+            candidates.append((src_name, rel, REPO / src_name / rel))
+        if not candidates:
             return None
-        rel = deployed.relative_to(matched_dest)  # type: ignore[arg-type]
-        repo_path = REPO / matched_src / rel
-        return src_name, rel, repo_path
+        for cand in reversed(candidates):  # specific → general
+            if cand[2].exists():
+                return cand
+        return candidates[-1]
 
     def _remove_one(deployed: Path) -> None:
         result = _find_repo_path(deployed)
@@ -1131,7 +1147,7 @@ def cmd_remove(args: argparse.Namespace) -> None:
         path = Path(raw).expanduser().resolve()
 
         # Accept either the deployed path or the repo path.
-        if path.is_relative_to(REPO):
+        if _is_relative_to(path, REPO):
             for src_name, dest_dir in dirs:
                 src_root = REPO / src_name if src_name != "." else REPO
                 try:
