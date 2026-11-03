@@ -6,38 +6,55 @@ on:
       - "v*"
 
 jobs:
-  build:
+  check-version:
     runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Build sdist and wheel
+      - name: Verify tag matches Cargo.toml version
         run: |
-          python -m pip install --upgrade build
-          python -m build
-
-      - name: Record version
-        id: version
-        run: echo "version=$(ls dist/*.whl | sed -E 's/.*dtfls-([^-]+)-.*/\1/')" >> "$GITHUB_OUTPUT"
-
-      - name: Verify tag matches package version
-        run: |
-          tag="${GITHUB_REF_NAME#v}"
-          if [ "$tag" != "${{ steps.version.outputs.version }}" ]; then
-            echo "Tag v$tag does not match pyproject.toml version ${{ steps.version.outputs.version }}" >&2
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          if [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match Cargo.toml version $version" >&2
             exit 1
           fi
 
+  build:
+    needs: check-version
+    strategy:
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-24.04-arm
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Package
+        run: |
+          name="dtfls-${GITHUB_REF_NAME}-${{ matrix.target }}"
+          mkdir "$name"
+          cp "target/${{ matrix.target }}/release/dtfls" README.md LICENSE "$name/"
+          tar czf "$name.tar.gz" "$name"
+          shasum -a 256 "$name.tar.gz" > "$name.tar.gz.sha256"
+
       - uses: actions/upload-artifact@v4
         with:
-          name: dist
-          path: dist/
+          name: dist-${{ matrix.target }}
+          path: dtfls-*.tar.gz*
 
   github-release:
     needs: build
@@ -47,7 +64,8 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: dist
+          pattern: dist-*
+          merge-multiple: true
           path: dist/
 
       - name: Publish GitHub Release
@@ -55,26 +73,3 @@ jobs:
         with:
           files: dist/*
           draft: false
-
-  # Disabled until PyPI Trusted Publishing is configured for this repo:
-  # pypi.org -> Account Settings -> Publishing -> Add a pending publisher
-  #   PyPI project name: dtfls
-  #   Owner: wrnkt   Repository: dtfls   Workflow: release.yml   Environment: pypi
-  # Once that's done, flip `if: false` to `if: true` below.
-  pypi:
-    needs: build
-    if: false
-    runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/project/dtfls/
-    permissions:
-      id-token: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: dist
-          path: dist/
-
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1

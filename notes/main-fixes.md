@@ -1,8 +1,9 @@
 # Fixes to the Python implementation
 
 Found while reviewing `main` at `4e63fd5`, ahead of the Rust port, so the port
-copies corrected behaviour rather than bugs. Each fix has a regression test in
-`tests/test_add_remove.py`.
+copies corrected behaviour rather than bugs. Each fix had a regression test in
+`tests/test_add_remove.py`; since the Python cutover the same behaviour is
+covered by the Rust tests (`src/routing.rs`, `src/config.rs`, `tests/cli.rs`).
 
 | # | Issue | Effect | Fix |
 |---|---|---|---|

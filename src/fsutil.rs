@@ -15,7 +15,7 @@ pub fn expand_tilde(raw: &str, home: &Path) -> PathBuf {
     }
 }
 
-/// Make *p* absolute and normalise it like Python's `Path.resolve()`:
+/// Make *p* absolute and normalise it (like `realpath -m`):
 /// symlinks are resolved for the part of the path that exists, and the path
 /// does not need to exist (unlike `fs::canonicalize`).
 pub fn resolve_lenient(p: &Path) -> PathBuf {
